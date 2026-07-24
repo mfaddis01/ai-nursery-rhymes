@@ -8,6 +8,7 @@ import json
 from rhyme_manager import RhymeManager
 from video_generator import VideoGenerator
 from upload_queue import UploadQueue
+from drive_sync import DriveSync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,6 +28,14 @@ class DailyScheduler:
         self.videos_per_day = int(os.getenv("VIDEOS_PER_DAY", 5))
         self.job_time = os.getenv("DAILY_JOB_TIME", "06:00")
         self.scheduler = BackgroundScheduler()
+
+        # Initialize Google Drive sync (optional)
+        service_account_json = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+        drive_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
+        if service_account_json and drive_folder_id:
+            self.drive_sync = DriveSync(service_account_json, drive_folder_id)
+        else:
+            self.drive_sync = None
 
     def generate_daily_videos(self):
         """Main job: Generate 5 videos (5 long-form + 5 short-form)."""
@@ -83,12 +92,18 @@ class DailyScheduler:
     def _notify_videos_ready(self, videos: list):
         """Create a notification that videos are ready for upload."""
         queue_summary = self.upload_queue.get_queue_summary()
+        
+        # Add Drive upload status if available
+        drive_status = ""
+        if self.drive_sync and self.drive_sync.is_authenticated():
+            drive_status = "\n✓ Videos uploaded to Google Drive automatically!"
+        
         notification = {
             "timestamp": datetime.now().isoformat(),
             "generated_today": len(videos),
             "total_pending": queue_summary["pending_videos"],
             "videos": videos,
-            "message": f"🎬 {len(videos)} video pairs are ready for upload!\n\nVideos generated today: {len(videos)}\nTotal pending upload: {queue_summary['pending_videos']}\n\nRun `python check_queue.py` to view the queue."
+            "message": f"🎬 {len(videos)} video pairs are ready for upload!\n\nVideos generated today: {len(videos)}\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\nRun `python check_queue.py` to view the queue."
         }
 
         notification_file = f"./notifications/ready_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
