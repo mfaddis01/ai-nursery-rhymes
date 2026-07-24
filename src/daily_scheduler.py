@@ -93,6 +93,11 @@ class DailyScheduler:
         """Create a notification that videos are ready for upload."""
         queue_summary = self.upload_queue.get_queue_summary()
         
+        # Count actual videos (long + shorts)
+        total_longs = len(videos)
+        total_shorts = sum(v.get("short_count", 2) for v in videos)
+        total_videos = total_longs + total_shorts
+        
         # Add Drive upload status if available
         drive_status = ""
         if self.drive_sync and self.drive_sync.is_authenticated():
@@ -101,9 +106,12 @@ class DailyScheduler:
         notification = {
             "timestamp": datetime.now().isoformat(),
             "generated_today": len(videos),
+            "total_longs": total_longs,
+            "total_shorts": total_shorts,
+            "total_videos": total_videos,
             "total_pending": queue_summary["pending_videos"],
             "videos": videos,
-            "message": f"🎬 {len(videos)} video pairs are ready for upload!\n\nVideos generated today: {len(videos)}\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\nRun `python check_queue.py` to view the queue."
+            "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\nRun `python check_queue.py` to view the queue."
         }
 
         notification_file = f"./notifications/ready_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

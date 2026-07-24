@@ -3,7 +3,7 @@ import json
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
@@ -116,24 +116,14 @@ class VideoGenerator:
             logger.warning(f"Failed to download image {url}: {e}")
             return None
 
-    def generate_video(self, rhyme: Dict, video_type: str = "long") -> str:
-        """Generate a complete video from a rhyme."""
-        logger.info(f"Generating {video_type}-form video for: {rhyme['title']}")
+    def generate_long_form_video(self, rhyme: Dict) -> str:
+        """Generate long-form video (3-5 min) from a rhyme."""
+        logger.info(f"Generating long-form video for: {rhyme['title']}")
         audio_path, audio_duration = self.generate_tts_audio(rhyme['text'])
         keywords = " ".join(rhyme.get("theme", ["nursery rhyme"]))
         image_urls = self.get_stock_images(keywords, count=3)
         title_frame = self.create_title_frame(rhyme['title'])
 
-        if video_type == "short":
-            video_path = self._assemble_short_video(rhyme, audio_path, title_frame, image_urls)
-        else:
-            video_path = self._assemble_long_video(rhyme, audio_path, title_frame, image_urls)
-
-        logger.info(f"Video generated: {video_path}")
-        return video_path
-
-    def _assemble_long_video(self, rhyme: Dict, audio_path: str, title_frame: str, image_urls: list) -> str:
-        """Assemble a long-form video (3-5 min)."""
         output_path = self.staging_dir / f"{rhyme['id']}_long_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
         cmd = [
             "ffmpeg", "-y", "-i", audio_path, "-i", title_frame,
@@ -149,23 +139,77 @@ class VideoGenerator:
             raise
         return str(output_path)
 
-    def _assemble_short_video(self, rhyme: Dict, audio_path: str, title_frame: str, image_urls: list) -> str:
-        """Assemble a short-form video (<60s)."""
-        output_path = self.staging_dir / f"{rhyme['id']}_short_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-        first_image = None
-        if image_urls:
-            first_image = self.download_image(image_urls[0])
-        visual = first_image or title_frame
-        cmd = [
-            "ffmpeg", "-y", "-i", audio_path, "-i", visual,
-            "-c:v", "libx264", "-c:a", "aac", "-shortest",
-            "-pix_fmt", "yuv420p", "-vf", "scale=1080:1920", "-t", "60",
-            str(output_path)
-        ]
+    def extract_shorts_from_long(self, long_video_path: str, num_shorts: int = 2) -> List[str]:
+        """
+        Extract short-form clips from a long-form video.
+
+        Args:
+            long_video_path: Path to long-form MP4
+            num_shorts: Number of short clips to extract (default: 2)
+
+        Returns:
+            List of short video file paths
+        """
+        logger.info(f"Extracting {num_shorts} short-form videos from long-form...")
+
+        if not os.path.exists(long_video_path):
+            logger.error(f"Long video not found: {long_video_path}")
+            return []
+
+        # Get duration of long-form video
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
-            logger.info(f"Short-form video created: {output_path}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg error: {e.stderr.decode()}")
-            raise
-        return str(output_path)
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1:noprint_wrappers=1", long_video_path],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            duration = float(result.stdout.strip())
+        except (subprocess.TimeoutExpired, ValueError):
+            logger.error("Failed to get video duration")
+            return []
+
+        if duration < 60:
+            logger.warning("Long-form video is less than 60 seconds, skipping shorts extraction")
+            return []
+
+        short_paths = []
+
+        if num_shorts >= 1:
+            # Clip 1: From 20s to 60s (40 seconds) - early part
+            short_path_1 = self.staging_dir / f"{Path(long_video_path).stem}_short_1_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            cmd = [
+                "ffmpeg", "-y", "-i", long_video_path,
+                "-ss", "20", "-to", "60",
+                "-c:v", "libx264", "-c:a", "aac",
+                "-pix_fmt", "yuv420p", "-vf", "scale=1080:1920",
+                str(short_path_1)
+            ]
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+                short_paths.append(str(short_path_1))
+                logger.info(f"✓ Short clip 1 created: {short_path_1}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to create short clip 1: {e.stderr.decode()}")
+
+        if num_shorts >= 2:
+            # Clip 2: From (duration - 50s) to end - late part
+            start_time = max(60, duration - 50)
+            short_path_2 = self.staging_dir / f"{Path(long_video_path).stem}_short_2_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            cmd = [
+                "ffmpeg", "-y", "-i", long_video_path,
+                "-ss", str(start_time), "-to", str(duration),
+                "-c:v", "libx264", "-c:a", "aac",
+                "-pix_fmt", "yuv420p", "-vf", "scale=1080:1920",
+                str(short_path_2)
+            ]
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+                short_paths.append(str(short_path_2))
+                logger.info(f"✓ Short clip 2 created: {short_path_2}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to create short clip 2: {e.stderr.decode()}")
+
+        logger.info(f"Extracted {len(short_paths)} short-form videos")
+        return short_paths
