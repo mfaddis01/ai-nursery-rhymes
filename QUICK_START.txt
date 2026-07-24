@@ -1,0 +1,35 @@
+╔══════════════════════════════════════════════════════════════╗
+║      AI Nursery Rhymes - Quick Start (5 Steps)               ║
+╚══════════════════════════════════════════════════════════════╝
+
+STEP 1: Get API Keys (10 min)
+  □ Claude: https://console.anthropic.com (copy: sk-ant-...)
+  □ ElevenLabs: https://elevenlabs.io (free tier OK)
+  □ Pexels: https://www.pexels.com/api (instant free)
+
+STEP 2: Setup Google Drive (5 min)
+  $ cd ~/ai-nursery-rhymes
+  $ bash setup_gdrive_interactive.sh
+  (Handles everything automatically!)
+
+STEP 3: Add API Keys (2 min)
+  $ nano config.env
+  (Paste your 3 API keys)
+
+STEP 4: Install & Test (5 min)
+  $ python3 -m venv venv
+  $ source venv/bin/activate
+  $ pip install -r requirements.txt
+  $ sudo apt-get install -y ffmpeg
+  $ cd src && python daily_scheduler.py test
+
+STEP 5: Deploy (30 sec)
+  $ python daily_scheduler.py &
+
+✓ DONE! Videos generate daily at 06:00 UTC and auto-sync to Drive.
+
+═══════════════════════════════════════════════════════════════
+Daily: python src/check_queue.py  (view pending videos)
+Logs:   tail -f logs/scheduler.log
+Status: python src/check_queue.py
+═══════════════════════════════════════════════════════════════
