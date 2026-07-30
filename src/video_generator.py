@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import math
 import subprocess
@@ -229,6 +230,44 @@ class VideoGenerator:
             ))
         return frames
 
+    # YouTube prefills the upload title from the filename (extension stripped),
+    # so the filename IS the title. Templates are overridable; keep them under
+    # YouTube's 100-char limit and free of characters Windows forbids, since
+    # these get downloaded from Drive before upload.
+    LONG_TITLE_TEMPLATE = os.getenv(
+        "YOUTUBE_LONG_TITLE", "{title} - Nursery Rhyme for Kids")
+    SHORT_TITLE_TEMPLATE = os.getenv(
+        "YOUTUBE_SHORT_TITLE", "{title} (Part {variant}) - Kids Song #Shorts")
+    TITLE_MAX = 100
+
+    @staticmethod
+    def _safe_filename(name: str) -> str:
+        """Strip characters that are illegal on Windows or awkward in shells."""
+        cleaned = re.sub(r'[\\/:*?"<>|&]', "", name)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+        return cleaned[:VideoGenerator.TITLE_MAX].strip()
+
+    def _unique_path(self, directory: Path, stem: str, suffix: str = ".mp4") -> Path:
+        """Avoid clobbering a same-named file already in the day folder.
+
+        The disambiguator only appears on an actual collision, so the normal
+        case keeps a clean title.
+        """
+        candidate = directory / f"{stem}{suffix}"
+        n = 2
+        while candidate.exists():
+            candidate = directory / f"{stem} ({n}){suffix}"
+            n += 1
+        return candidate
+
+    def long_video_name(self, rhyme: Dict) -> str:
+        return self._safe_filename(
+            self.LONG_TITLE_TEMPLATE.format(title=rhyme.get("title", "Nursery Rhyme")))
+
+    def short_video_name(self, rhyme: Dict, variant: int) -> str:
+        return self._safe_filename(self.SHORT_TITLE_TEMPLATE.format(
+            title=rhyme.get("title", "Nursery Rhyme"), variant=variant))
+
     def _loop_audio(self, audio_path: str, audio_duration: float, target_seconds: float) -> str:
         """Repeat the narration until it fills target_seconds.
 
@@ -285,7 +324,7 @@ class VideoGenerator:
         logger.info(f"Slideshow has {len(frames)} frame(s)")
 
         slideshow_args, filtergraph = self._slideshow_args(frames, target_seconds)
-        output_path = self.staging_dir / f"{rhyme['id']}_long_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        output_path = self._unique_path(self.staging_dir, self.long_video_name(rhyme))
         cmd = (
             ["ffmpeg", "-y"]
             + slideshow_args
@@ -304,7 +343,8 @@ class VideoGenerator:
             raise
         return str(output_path)
 
-    def extract_shorts_from_long(self, long_video_path: str, num_shorts: int = 2) -> List[str]:
+    def extract_shorts_from_long(self, long_video_path: str, num_shorts: int = 2,
+                                 rhyme: Dict = None) -> List[str]:
         """
         Extract short-form clips from a long-form video.
 
@@ -343,7 +383,11 @@ class VideoGenerator:
 
         if num_shorts >= 1:
             # Clip 1: From 20s to 60s (40 seconds) - early part
-            short_path_1 = self.staging_dir / f"{Path(long_video_path).stem}_short_1_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            short_path_1 = self._unique_path(
+                self.staging_dir,
+                self.short_video_name(rhyme, 1) if rhyme
+                else f"{Path(long_video_path).stem}_short_1",
+            )
             cmd = [
                 "ffmpeg", "-y", "-i", long_video_path,
                 "-ss", "20", "-to", "60",
@@ -361,7 +405,11 @@ class VideoGenerator:
         if num_shorts >= 2:
             # Clip 2: From (duration - 50s) to end - late part
             start_time = max(60, duration - 50)
-            short_path_2 = self.staging_dir / f"{Path(long_video_path).stem}_short_2_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            short_path_2 = self._unique_path(
+                self.staging_dir,
+                self.short_video_name(rhyme, 2) if rhyme
+                else f"{Path(long_video_path).stem}_short_2",
+            )
             cmd = [
                 "ffmpeg", "-y", "-i", long_video_path,
                 "-ss", str(start_time), "-to", str(duration),

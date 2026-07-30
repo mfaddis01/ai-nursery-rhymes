@@ -73,7 +73,7 @@ class DailyScheduler:
 
                     logger.info(f"Extracting short-form videos...")
                     shorts = self.video_generator.extract_shorts_from_long(
-                        long_video, num_shorts=2
+                        long_video, num_shorts=2, rhyme=rhyme
                     )
                     if not shorts:
                         raise RuntimeError(
