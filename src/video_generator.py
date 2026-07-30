@@ -11,6 +11,8 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import logging
 
+import cartoon
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -187,6 +189,37 @@ class VideoGenerator:
             logger.warning(f"Failed to download image {url}: {e}")
             return None
 
+    def _build_frames(self, rhyme: Dict) -> List[str]:
+        """Build the slideshow frames for a rhyme.
+
+        Defaults to procedurally drawn cartoon art. Pexels returns real
+        photography, which reads as adult/documentary and is wrong for a
+        children's channel; set IMAGE_SOURCE=pexels to go back to it.
+        """
+        source = os.getenv("IMAGE_SOURCE", "cartoon").lower()
+        theme = " ".join(rhyme.get("theme", []) or ["playful"])
+        stem = f"{rhyme['id']}_{datetime.now().strftime('%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
+        if source == "pexels":
+            frames = [self.create_title_frame(rhyme["title"])]
+            for url in self.get_stock_images(theme, count=4):
+                downloaded = self.download_image(url)
+                if downloaded:
+                    frames.append(downloaded)
+            return frames
+
+        frames = [cartoon.title_card(
+            rhyme["title"], str(self.staging_dir / f"title_{stem}.png"), seed=hash(stem) & 0xFFFF
+        )]
+        # Alternate the rhyme's own theme with a generic playful scene so
+        # successive frames are visibly different rather than near-identical.
+        for i in range(4):
+            scene_theme = theme if i % 2 == 0 else "playful"
+            frames.append(cartoon.scene(
+                scene_theme, str(self.staging_dir / f"scene{i}_{stem}.png"), seed=i * 7 + 3
+            ))
+        return frames
+
     def _loop_audio(self, audio_path: str, audio_duration: float, target_seconds: float) -> str:
         """Repeat the narration until it fills target_seconds.
 
@@ -239,13 +272,7 @@ class VideoGenerator:
         audio_path, audio_duration = self.generate_tts_audio(rhyme['text'])
         looped_audio = self._loop_audio(audio_path, audio_duration, target_seconds)
 
-        title_frame = self.create_title_frame(rhyme['title'])
-        frames = [title_frame]
-        keywords = " ".join(rhyme.get("theme", ["nursery rhyme"]))
-        for url in self.get_stock_images(keywords, count=4):
-            downloaded = self.download_image(url)
-            if downloaded:
-                frames.append(downloaded)
+        frames = self._build_frames(rhyme)
         logger.info(f"Slideshow has {len(frames)} frame(s)")
 
         slideshow_args, filtergraph = self._slideshow_args(frames, target_seconds)

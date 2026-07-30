@@ -82,5 +82,29 @@
     "age_group": "2-5",
     "duration_estimate": 116,
     "created": "2026-07-30T06:03:30.821448"
+  },
+  {
+    "id": "generated_7_20260730_132528",
+    "title": "Sunny Says Good Morning",
+    "text": "Sunny peeks in, bright and new,\nHop right up, the day says \"Boo!\"\nStretch your arms and touch the sky,\nWave to sleepy clouds bye-bye.\n\nSplash-splash water on my nose,\nBrush my teeth in tidy rows.\nOne sock, two socks, shirt goes on,\nWiggle till the buttons're done.\n\nSpoon and bowl and one big grin,\nBreakfast time, let's dig right in!\nOut the door and off I go \u2014\nGood morning, world, hello, hello!",
+    "source": "ai-generated",
+    "theme": [
+      "morning routines"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 148,
+    "created": "2026-07-30T13:25:28.041310"
+  },
+  {
+    "id": "generated_8_20260730_132626",
+    "title": "Deep Green Woods",
+    "text": "Tall green trees stand in a row,\nMossy paths where mushrooms grow.\nHop a log and count to three,\nA bushy squirrel waves at me!\n\nOwl says whoo from way up high,\nFerns go swish as we walk by.\nAcorns tumble, plip-plop-plunk,\nRabbit hides behind a trunk.\n\nWave goodbye to every tree,\nThe woods will wait for you and me!",
+    "source": "ai-generated",
+    "theme": [
+      "the forest"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 120,
+    "created": "2026-07-30T13:26:26.072738"
   }
 ]

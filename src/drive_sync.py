@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Optional
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
+from google.auth.exceptions import DefaultCredentialsError
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
@@ -14,7 +15,10 @@ logger = logging.getLogger(__name__)
 class DriveSync:
     """Manages uploading videos to Google Drive."""
 
-    SCOPES = ['https://www.googleapis.com/auth/drive.file']
+    # Full drive scope: drive.file only grants access to files the app itself
+    # created, which makes uploading into a pre-existing folder unreliable.
+    # Tighten to drive.file if the destination folder is app-created.
+    SCOPES = [os.getenv("GOOGLE_DRIVE_SCOPE", "https://www.googleapis.com/auth/drive")]
 
     def __init__(self, service_account_json: str, folder_id: str):
         """
@@ -27,25 +31,64 @@ class DriveSync:
         self.service_account_json = service_account_json
         self.folder_id = folder_id
         self.service = None
+        self.auth_mode = "unauthenticated"
 
-        if not os.path.exists(service_account_json):
-            logger.warning(f"Service account file not found: {service_account_json}")
-            logger.info("GDrive integration disabled. See SETUP for configuration.")
+        if self._is_placeholder(folder_id):
+            logger.info("GOOGLE_DRIVE_FOLDER_ID not configured. GDrive integration disabled.")
             return
 
         try:
             self._authenticate()
-            logger.info(f"✓ Google Drive authenticated")
+            logger.info(f"✓ Google Drive authenticated ({self.auth_mode})")
+        except DefaultCredentialsError:
+            # Not an error - Drive is simply not set up on this host yet.
+            logger.info(
+                "No Google credentials found. GDrive integration disabled. "
+                "Run: gcloud auth application-default login "
+                "--scopes=https://www.googleapis.com/auth/drive,"
+                "https://www.googleapis.com/auth/cloud-platform"
+            )
+            self.service = None
         except Exception as e:
             logger.error(f"Failed to authenticate with Google Drive: {e}")
             self.service = None
 
+    @staticmethod
+    def _is_placeholder(value: str) -> bool:
+        """True when a config value is absent or still the shipped placeholder."""
+        if not value or not value.strip():
+            return True
+        v = value.strip().lower()
+        return v.startswith("your_") or v.endswith("_here") or v in {"none", "changeme"}
+
     def _authenticate(self):
-        """Authenticate using service account."""
-        credentials = service_account.Credentials.from_service_account_file(
-            self.service_account_json,
-            scopes=self.SCOPES
+        """Authenticate with a service account key, or fall back to ADC.
+
+        Many Google Cloud orgs enforce
+        constraints/iam.managed.disableServiceAccountKeyCreation, which makes a
+        service account key impossible to mint. Application Default Credentials
+        authenticate as the user instead - which also sidesteps the fact that
+        service accounts have no Drive storage quota, since files are then
+        owned by the user rather than the service account.
+        """
+        has_key = (
+            self.service_account_json
+            and os.path.exists(self.service_account_json)
+            and os.path.getsize(self.service_account_json) > 0
         )
+        if has_key:
+            self.auth_mode = "service account"
+            credentials = service_account.Credentials.from_service_account_file(
+                self.service_account_json,
+                scopes=self.SCOPES
+            )
+        else:
+            import google.auth
+            self.auth_mode = "application default credentials"
+            # Scopes already granted at `gcloud auth application-default login`
+            # time are what actually apply for user credentials.
+            credentials, _ = google.auth.default(scopes=self.SCOPES)
+
         self.service = build('drive', 'v3', credentials=credentials)
 
     def upload_video(self, video_path: str, rhyme_title: str, video_type: str = "long") -> Optional[str]:

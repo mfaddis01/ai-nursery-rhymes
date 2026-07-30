@@ -33,7 +33,9 @@ class DailyScheduler:
         # Initialize Google Drive sync (optional)
         service_account_json = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
         drive_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
-        if service_account_json and drive_folder_id:
+        # Only the folder id is required: without a service account key,
+        # DriveSync falls back to Application Default Credentials.
+        if drive_folder_id:
             self.drive_sync = DriveSync(service_account_json, drive_folder_id)
         else:
             self.drive_sync = None
