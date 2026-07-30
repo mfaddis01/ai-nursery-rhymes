@@ -32,18 +32,59 @@ for directory in ("logs", "output", "output/staging", "notifications"):
 
 from daily_scheduler import DailyScheduler  # noqa: E402  (needs the path setup above)
 
-USAGE = "usage: run_daily.py {test|test-ai|run|schedule}"
+USAGE = "usage: run_daily.py {test|test-ai|run|schedule|sync-drive}"
+
+
+def sync_drive(scheduler, dry_run: bool = False) -> int:
+    """Upload any local video missing from its Drive day folder.
+
+    _sync_to_drive only runs during a pipeline run, so anything produced
+    while Drive was unconfigured or unreachable is absent from Drive
+    permanently and silently. This reconciles the two. Uploads already skip
+    files whose name exists in the day folder, so re-running is safe.
+    """
+    drive = scheduler.drive_sync
+    if not drive or not drive.is_authenticated():
+        print("Google Drive is not configured; nothing to sync.", file=sys.stderr)
+        return 1
+
+    staging = REPO_ROOT / "output" / "staging"
+    uploaded = skipped = failed = 0
+
+    for day_dir in sorted(p for p in staging.iterdir() if p.is_dir()):
+        videos = sorted(day_dir.glob("*.mp4"))
+        if not videos:
+            continue
+        parent = drive.day_folder_id(day_dir.name)
+        for video in videos:
+            if drive._find_child(parent, video.name):
+                skipped += 1
+                continue
+            if dry_run:
+                print(f"  would upload {day_dir.name}/{video.name}")
+                uploaded += 1
+                continue
+            if drive.upload_video(str(video), video.stem, "long"):
+                uploaded += 1
+            else:
+                failed += 1
+
+    print(f"\nDrive sync: {uploaded} uploaded, {skipped} already present, {failed} failed")
+    return 1 if failed else 0
 
 
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "run"
     os.chdir(REPO_ROOT)
 
-    if mode not in {"test", "test-ai", "run", "schedule"}:
+    if mode not in {"test", "test-ai", "run", "schedule", "sync-drive"}:
         print(USAGE, file=sys.stderr)
         return 2
 
     scheduler = DailyScheduler()
+
+    if mode == "sync-drive":
+        return sync_drive(scheduler)
 
     if mode in {"test", "test-ai", "run"}:
         if mode == "test":
