@@ -91,7 +91,11 @@ class DriveSync:
             request = self.service.files().create(
                 body=file_metadata,
                 media_body=media,
-                fields='id, webViewLink'
+                fields='id, webViewLink',
+                # Required to write into a Shared Drive. Without it the API only
+                # targets My Drive, where a service account has no storage quota
+                # and every upload fails with storageQuotaExceeded.
+                supportsAllDrives=True,
             )
 
             response = None

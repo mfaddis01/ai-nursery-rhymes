@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Nursery Rhymes - Daily Video Generation
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/miguel/ai-nursery-rhymes
+ExecStart=/home/miguel/ai-nursery-rhymes/venv/bin/python run_daily.py run
+# rhyme_manager shells out to the Claude Code CLI; a user unit does not inherit
+# the login PATH, so point at it explicitly.
+Environment=CLAUDE_BIN=/home/miguel/.local/bin/claude
+Environment=PATH=/home/miguel/.local/bin:/usr/local/bin:/usr/bin:/bin
+# 5 videos x (TTS + 3.5min encode + 2 short extractions) needs real headroom.
+TimeoutStartSec=3600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

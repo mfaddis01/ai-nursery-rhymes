@@ -1,6 +1,8 @@
 import os
 import json
+import math
 import subprocess
+import uuid
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Tuple, List
@@ -21,16 +23,22 @@ class VideoGenerator:
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         self.pexels_api_key = os.getenv("PEXELS_API_KEY")
 
-    def generate_tts_audio(self, text: str, voice_id: str = "21m00Tcm4TlvDq8ikWAM") -> Tuple[str, float]:
+    # "Jessica - Playful, Bright, Warm", a premade voice. The previous default
+    # (Rachel) is a *library* voice, which the API refuses on free plans.
+    DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9"
+
+    def generate_tts_audio(self, text: str, voice_id: str = None) -> Tuple[str, float]:
         """Generate TTS audio using ElevenLabs."""
+        voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID", self.DEFAULT_VOICE_ID)
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         headers = {
             "xi-api-key": self.elevenlabs_api_key,
             "Content-Type": "application/json"
         }
+        # eleven_monolingual_v1 was retired by ElevenLabs and now 400s.
         data = {
             "text": text,
-            "model_id": "eleven_monolingual_v1",
+            "model_id": os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.75
@@ -43,7 +51,7 @@ class VideoGenerator:
         if response.status_code != 200:
             raise Exception(f"ElevenLabs API error: {response.status_code} - {response.text}")
 
-        audio_path = self.staging_dir / f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+        audio_path = self.staging_dir / f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.mp3"
         with open(audio_path, 'wb') as f:
             f.write(response.content)
 
@@ -79,60 +87,181 @@ class VideoGenerator:
         logger.info(f"Found {len(image_urls)} stock images")
         return image_urls
 
+    TITLE_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    SUBTITLE_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+    @staticmethod
+    def _wrap_to_width(draw, text: str, font, max_width: int) -> List[str]:
+        """Greedy word-wrap measured against the actual font metrics."""
+        lines, current = [], ""
+        for word in text.split():
+            candidate = f"{current} {word}".strip()
+            width = draw.textbbox((0, 0), candidate, font=font)[2]
+            if current and width > max_width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return lines
+
+    def _fit_title(self, draw, title: str, max_width: int, max_lines: int = 3):
+        """Find the largest font size at which the title fits the frame.
+
+        A fixed 80px font overflowed 1080px on longer titles and was drawn at a
+        negative x, clipping the first and last characters.
+        """
+        for size in range(88, 40, -4):
+            try:
+                font = ImageFont.truetype(self.TITLE_FONT, size)
+            except OSError:
+                return ImageFont.load_default(), [title]
+            lines = self._wrap_to_width(draw, title, font, max_width)
+            widest = max(draw.textbbox((0, 0), ln, font=font)[2] for ln in lines)
+            if len(lines) <= max_lines and widest <= max_width:
+                return font, lines
+        return font, lines
+
     def create_title_frame(self, title: str, duration_seconds: float = 3) -> str:
         """Create a colorful title frame."""
-        img = Image.new('RGB', (1080, 1920), color=(255, 200, 100))
+        width, height, margin = 1080, 1920, 60
+        max_width = width - (2 * margin)
+
+        img = Image.new('RGB', (width, height), color=(255, 200, 100))
         draw = ImageDraw.Draw(img)
 
+        font, lines = self._fit_title(draw, title, max_width)
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 80)
-            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 40)
-        except:
-            font = ImageFont.load_default()
+            small_font = ImageFont.truetype(self.SUBTITLE_FONT, 40)
+        except OSError:
             small_font = ImageFont.load_default()
 
-        text_bbox = draw.textbbox((0, 0), title, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_x = (1080 - text_width) // 2
-        draw.text((text_x, 800), title, fill=(255, 255, 255), font=font)
-        draw.text((540 - 100, 950), "Nursery Rhyme", fill=(255, 255, 255), font=small_font)
+        line_height = int(font.size * 1.25)
+        block_height = line_height * len(lines)
+        y = (height // 2) - (block_height // 2)
 
-        img_path = self.staging_dir / f"title_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        for line in lines:
+            line_width = draw.textbbox((0, 0), line, font=font)[2]
+            draw.text(((width - line_width) // 2, y), line, fill=(255, 255, 255), font=font)
+            y += line_height
+
+        subtitle = "Nursery Rhyme"
+        sub_width = draw.textbbox((0, 0), subtitle, font=small_font)[2]
+        draw.text(((width - sub_width) // 2, y + 30), subtitle,
+                  fill=(255, 255, 255), font=small_font)
+
+        img_path = self.staging_dir / f"title_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
         img.save(img_path)
 
-        logger.info(f"Created title frame: {img_path}")
+        logger.info(f"Created title frame ({len(lines)} line(s) @ {font.size}px): {img_path}")
         return str(img_path)
 
     def download_image(self, url: str) -> str:
         """Download an image and save it locally."""
         try:
             response = requests.get(url, timeout=10)
-            img = Image.open(BytesIO(response.content))
-            img = img.resize((1080, 1920), Image.Resampling.LANCZOS)
-            img_path = self.staging_dir / f"image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+
+            # Cover-crop rather than resize((1080,1920)), which stretched
+            # landscape stock photos into distorted portraits. Scale so the
+            # image covers the frame, then centre-crop the overflow.
+            target_w, target_h = 1080, 1920
+            scale = max(target_w / img.width, target_h / img.height)
+            img = img.resize(
+                (max(target_w, round(img.width * scale)),
+                 max(target_h, round(img.height * scale))),
+                Image.Resampling.LANCZOS,
+            )
+            left = (img.width - target_w) // 2
+            top = (img.height - target_h) // 2
+            img = img.crop((left, top, left + target_w, top + target_h))
+            # Second-resolution timestamps collide when several images are
+            # fetched in the same second, silently overwriting each other.
+            img_path = self.staging_dir / (
+                f"image_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg"
+            )
             img.save(img_path)
             return str(img_path)
         except Exception as e:
             logger.warning(f"Failed to download image {url}: {e}")
             return None
 
+    def _loop_audio(self, audio_path: str, audio_duration: float, target_seconds: float) -> str:
+        """Repeat the narration until it fills target_seconds.
+
+        A single reading of an 8-12 line rhyme is only ~30-45s, which is below
+        the 60s floor that extract_shorts_from_long() requires. Repetition is
+        native to the nursery-rhyme format, so we loop rather than pad silence.
+        """
+        if audio_duration <= 0:
+            raise ValueError(f"cannot loop audio with duration {audio_duration}")
+
+        repeats = max(1, math.ceil(target_seconds / audio_duration))
+        looped_path = self.staging_dir / f"looped_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.m4a"
+        cmd = [
+            "ffmpeg", "-y",
+            "-stream_loop", str(repeats - 1), "-i", audio_path,
+            "-t", f"{target_seconds:.2f}",
+            "-c:a", "aac", "-b:a", "128k",
+            str(looped_path),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
+        logger.info(
+            f"Looped narration {repeats}x to {target_seconds:.0f}s "
+            f"(single pass was {audio_duration:.1f}s)"
+        )
+        return str(looped_path)
+
+    def _slideshow_args(self, frames: List[str], target_seconds: float) -> Tuple[List[str], str]:
+        """Build ffmpeg inputs that hold each frame for an equal slice of the run.
+
+        Uses one `-loop 1 -t` input per frame plus the concat *filter*, rather
+        than the concat *demuxer*. The demuxer silently ignores its `duration`
+        directives for still images and yields a ~1s video regardless.
+        """
+        per_frame = target_seconds / len(frames)
+        args: List[str] = []
+        for frame in frames:
+            args += ["-loop", "1", "-t", f"{per_frame:.3f}", "-i", frame]
+        streams = "".join(f"[{i}:v]" for i in range(len(frames)))
+        filtergraph = (
+            f"{streams}concat=n={len(frames)}:v=1:a=0,"
+            f"scale=1080:1920,fps=30[v]"
+        )
+        return args, filtergraph
+
     def generate_long_form_video(self, rhyme: Dict) -> str:
         """Generate long-form video (3-5 min) from a rhyme."""
         logger.info(f"Generating long-form video for: {rhyme['title']}")
-        audio_path, audio_duration = self.generate_tts_audio(rhyme['text'])
-        keywords = " ".join(rhyme.get("theme", ["nursery rhyme"]))
-        image_urls = self.get_stock_images(keywords, count=3)
-        title_frame = self.create_title_frame(rhyme['title'])
+        target_seconds = float(os.getenv("LONG_FORM_TARGET_SECONDS", "210"))
 
+        audio_path, audio_duration = self.generate_tts_audio(rhyme['text'])
+        looped_audio = self._loop_audio(audio_path, audio_duration, target_seconds)
+
+        title_frame = self.create_title_frame(rhyme['title'])
+        frames = [title_frame]
+        keywords = " ".join(rhyme.get("theme", ["nursery rhyme"]))
+        for url in self.get_stock_images(keywords, count=4):
+            downloaded = self.download_image(url)
+            if downloaded:
+                frames.append(downloaded)
+        logger.info(f"Slideshow has {len(frames)} frame(s)")
+
+        slideshow_args, filtergraph = self._slideshow_args(frames, target_seconds)
         output_path = self.staging_dir / f"{rhyme['id']}_long_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-        cmd = [
-            "ffmpeg", "-y", "-i", audio_path, "-i", title_frame,
-            "-c:v", "libx264", "-c:a", "aac", "-shortest",
-            "-pix_fmt", "yuv420p", "-vf", "scale=1080:1920",
-            str(output_path)
-        ]
+        cmd = (
+            ["ffmpeg", "-y"]
+            + slideshow_args
+            + ["-i", looped_audio,
+               "-filter_complex", filtergraph,
+               "-map", "[v]", "-map", f"{len(frames)}:a",
+               "-c:v", "libx264", "-c:a", "aac", "-shortest",
+               "-pix_fmt", "yuv420p",
+               str(output_path)]
+        )
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=600)
             logger.info(f"Long-form video created: {output_path}")
         except subprocess.CalledProcessError as e:
             logger.error(f"FFmpeg error: {e.stderr.decode()}")

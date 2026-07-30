@@ -54,3 +54,6 @@ wheels/
 *.pem
 credentials.json
 service-account.json
+
+# local queue backups
+upload_queue.json.*

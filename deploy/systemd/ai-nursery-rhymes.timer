@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Nursery Rhymes Daily Timer (06:00 local)
+
+[Timer]
+# DAILY_JOB_TIME in config.env is 06:00. The vault notes call this "06:00 UTC",
+# but both APScheduler's CronTrigger and systemd OnCalendar use local time, so
+# this fires at 06:00 PDT.
+OnCalendar=*-*-* 06:00:00
+# WSL is not always running; catch up on the next boot if a run was missed.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
