@@ -134,7 +134,8 @@ class DriveSync:
         self._day_folder_cache[day] = found
         return found
 
-    def upload_video(self, video_path: str, rhyme_title: str, video_type: str = "long") -> Optional[str]:
+    def upload_video(self, video_path: str, rhyme_title: str, video_type: str = "long",
+                     day: str = None) -> Optional[str]:
         """
         Upload a video to Google Drive.
 
@@ -159,7 +160,9 @@ class DriveSync:
         file_size_mb = file_size / (1024 * 1024)
 
         try:
-            parent = self.day_folder_id()
+            # `day` lets a backfill file older output under its own date
+            # instead of today's folder.
+            parent = self.day_folder_id(day)
         except Exception as e:
             logger.error(f"Could not resolve the day folder: {e}")
             return None
