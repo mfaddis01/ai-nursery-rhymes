@@ -17,10 +17,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class VideoGenerator:
-    def __init__(self, output_dir: str = "./output", staging_dir: str = "./output/staging"):
+    def __init__(self, output_dir: str = "./output", staging_dir: str = "./output/staging",
+                 day: str = None):
         self.output_dir = Path(output_dir)
-        self.staging_dir = Path(staging_dir)
+        self.staging_root = Path(staging_dir)
+        self.day = day or datetime.now().strftime("%Y-%m-%d")
+
+        # Finished videos land in a per-day folder so it is obvious at a glance
+        # which ones still need uploading. Intermediates (TTS, frames, looped
+        # audio) go to a separate work tree so they never clutter that view.
+        self.staging_dir = self.staging_root / self.day
+        self.work_dir = self.output_dir / "work" / self.day
         self.staging_dir.mkdir(parents=True, exist_ok=True)
+        self.work_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         self.pexels_api_key = os.getenv("PEXELS_API_KEY")
@@ -53,7 +62,7 @@ class VideoGenerator:
         if response.status_code != 200:
             raise Exception(f"ElevenLabs API error: {response.status_code} - {response.text}")
 
-        audio_path = self.staging_dir / f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.mp3"
+        audio_path = self.work_dir / f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.mp3"
         with open(audio_path, 'wb') as f:
             f.write(response.content)
 
@@ -153,7 +162,7 @@ class VideoGenerator:
         draw.text(((width - sub_width) // 2, y + 30), subtitle,
                   fill=(255, 255, 255), font=small_font)
 
-        img_path = self.staging_dir / f"title_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
+        img_path = self.work_dir / f"title_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
         img.save(img_path)
 
         logger.info(f"Created title frame ({len(lines)} line(s) @ {font.size}px): {img_path}")
@@ -180,7 +189,7 @@ class VideoGenerator:
             img = img.crop((left, top, left + target_w, top + target_h))
             # Second-resolution timestamps collide when several images are
             # fetched in the same second, silently overwriting each other.
-            img_path = self.staging_dir / (
+            img_path = self.work_dir / (
                 f"image_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg"
             )
             img.save(img_path)
@@ -209,14 +218,14 @@ class VideoGenerator:
             return frames
 
         frames = [cartoon.title_card(
-            rhyme["title"], str(self.staging_dir / f"title_{stem}.png"), seed=hash(stem) & 0xFFFF
+            rhyme["title"], str(self.work_dir / f"title_{stem}.png"), seed=hash(stem) & 0xFFFF
         )]
         # Alternate the rhyme's own theme with a generic playful scene so
         # successive frames are visibly different rather than near-identical.
         for i in range(4):
             scene_theme = theme if i % 2 == 0 else "playful"
             frames.append(cartoon.scene(
-                scene_theme, str(self.staging_dir / f"scene{i}_{stem}.png"), seed=i * 7 + 3
+                scene_theme, str(self.work_dir / f"scene{i}_{stem}.png"), seed=i * 7 + 3
             ))
         return frames
 
@@ -231,7 +240,7 @@ class VideoGenerator:
             raise ValueError(f"cannot loop audio with duration {audio_duration}")
 
         repeats = max(1, math.ceil(target_seconds / audio_duration))
-        looped_path = self.staging_dir / f"looped_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.m4a"
+        looped_path = self.work_dir / f"looped_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.m4a"
         cmd = [
             "ffmpeg", "-y",
             "-stream_loop", str(repeats - 1), "-i", audio_path,

@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 from google.oauth2 import service_account
@@ -32,6 +33,7 @@ class DriveSync:
         self.folder_id = folder_id
         self.service = None
         self.auth_mode = "unauthenticated"
+        self._day_folder_cache = {}
 
         if self._is_placeholder(folder_id):
             logger.info("GOOGLE_DRIVE_FOLDER_ID not configured. GDrive integration disabled.")
@@ -91,6 +93,47 @@ class DriveSync:
 
         self.service = build('drive', 'v3', credentials=credentials)
 
+    FOLDER_MIME = "application/vnd.google-apps.folder"
+
+    @staticmethod
+    def _escape(name: str) -> str:
+        """Escape a literal for a Drive query string."""
+        return name.replace("\\", "\\\\").replace("'", "\\'")
+
+    def _find_child(self, parent: str, name: str, mime: str = None) -> Optional[str]:
+        """Return the id of a non-trashed child by exact name, or None."""
+        q = f"'{parent}' in parents and name = '{self._escape(name)}' and trashed = false"
+        if mime:
+            q += f" and mimeType = '{mime}'"
+        res = self.service.files().list(
+            q=q, fields="files(id)", pageSize=1,
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
+        ).execute()
+        files = res.get("files", [])
+        return files[0]["id"] if files else None
+
+    def day_folder_id(self, day: str = None) -> str:
+        """Find or create the YYYY-MM-DD subfolder for a run's output.
+
+        Grouping by day makes it obvious which videos still need uploading,
+        instead of one flat folder that grows by 15 files a day.
+        """
+        day = day or datetime.now().strftime("%Y-%m-%d")
+        if self._day_folder_cache.get(day):
+            return self._day_folder_cache[day]
+
+        found = self._find_child(self.folder_id, day, self.FOLDER_MIME)
+        if not found:
+            created = self.service.files().create(
+                body={"name": day, "mimeType": self.FOLDER_MIME, "parents": [self.folder_id]},
+                fields="id", supportsAllDrives=True,
+            ).execute()
+            found = created["id"]
+            logger.info(f"Created Drive folder for {day}")
+
+        self._day_folder_cache[day] = found
+        return found
+
     def upload_video(self, video_path: str, rhyme_title: str, video_type: str = "long") -> Optional[str]:
         """
         Upload a video to Google Drive.
@@ -115,12 +158,25 @@ class DriveSync:
         file_size = os.path.getsize(video_path)
         file_size_mb = file_size / (1024 * 1024)
 
+        try:
+            parent = self.day_folder_id()
+        except Exception as e:
+            logger.error(f"Could not resolve the day folder: {e}")
+            return None
+
+        # Drive allows duplicate names, so an unconditional create() would add a
+        # second copy of every file on any re-run or retry.
+        existing = self._find_child(parent, filename)
+        if existing:
+            logger.info(f"Already in Drive, skipping: {filename}")
+            return existing
+
         logger.info(f"Uploading {video_type} video: {filename} ({file_size_mb:.1f} MB)")
 
         try:
             file_metadata = {
                 'name': filename,
-                'parents': [self.folder_id],
+                'parents': [parent],
                 'description': f"{rhyme_title} - {video_type} form video"
             }
 
