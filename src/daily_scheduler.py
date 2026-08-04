@@ -2,6 +2,7 @@ import os
 import random
 import logging
 from datetime import datetime
+from uuid import uuid4
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import json
@@ -51,6 +52,7 @@ class DailyScheduler:
         logger.info("Starting daily video generation job")
         logger.info("=" * 60)
         generated_videos = []
+        drive_uploaded = 0
 
         sources = [force_source or ("popular" if i < 3 else "generated") for i in range(total)]
         popular_picks = self._distinct_popular(sources.count("popular"))
@@ -90,7 +92,7 @@ class DailyScheduler:
                             short_variant=variant,
                         )
 
-                    self._sync_to_drive(rhyme, long_video, shorts)
+                    drive_uploaded += self._sync_to_drive(rhyme, long_video, shorts)
 
                     generated_videos.append({
                         "title": rhyme["title"],
@@ -108,7 +110,7 @@ class DailyScheduler:
                     logger.error(f"✗ Failed to generate video #{i+1}: {e}", exc_info=True)
                     continue
 
-            self._notify_videos_ready(generated_videos)
+            self._notify_videos_ready(generated_videos, drive_uploaded)
         except Exception as e:
             logger.error(f"Daily job failed: {e}", exc_info=True)
 
@@ -141,47 +143,74 @@ class DailyScheduler:
             picks.append(random.choice(pool))
         return picks
 
-    def _sync_to_drive(self, rhyme: dict, long_video: str, shorts: list):
-        """Upload the long-form video and its shorts to Google Drive, if configured."""
+    def _sync_to_drive(self, rhyme: dict, long_video: str, shorts: list) -> int:
+        """Upload the long-form video and its shorts to Drive, if configured.
+
+        Returns the number of files that actually landed in Drive, so the run
+        summary can report the truth instead of assuming success.
+        """
         if not self.drive_sync or not self.drive_sync.is_authenticated():
-            return
+            return 0
+        uploaded = 0
         try:
-            self.drive_sync.upload_video(long_video, rhyme["title"], video_type="long")
+            if self.drive_sync.upload_video(long_video, rhyme["title"], video_type="long"):
+                uploaded += 1
             for variant, short_video in enumerate(shorts, start=1):
-                self.drive_sync.upload_video(
+                if self.drive_sync.upload_video(
                     short_video, f"{rhyme['title']} (short {variant})", video_type="short"
-                )
-            logger.info(f"Uploaded {1 + len(shorts)} file(s) to Google Drive")
+                ):
+                    uploaded += 1
         except Exception as e:
             # Drive is an optional mirror - never fail the run over it.
             logger.error(f"Google Drive upload failed: {e}", exc_info=True)
 
-    def _notify_videos_ready(self, videos: list):
+        expected = 1 + len(shorts)
+        if uploaded == expected:
+            logger.info(f"Uploaded {uploaded} file(s) to Google Drive")
+        else:
+            logger.error(
+                f"Google Drive: only {uploaded} of {expected} file(s) uploaded for "
+                f"'{rhyme['title']}'. Re-run `run_daily.py sync-drive` once Drive is healthy."
+            )
+        return uploaded
+
+    def _notify_videos_ready(self, videos: list, drive_uploaded: int = 0):
         """Create a notification that videos are ready for upload."""
         queue_summary = self.upload_queue.get_queue_summary()
-        
+
         # Count actual videos (long + shorts)
         total_longs = len(videos)
         total_shorts = sum(v.get("short_count", 2) for v in videos)
         total_videos = total_longs + total_shorts
-        
-        # Add Drive upload status if available
-        drive_status = ""
-        if self.drive_sync and self.drive_sync.is_authenticated():
-            drive_status = "\n✓ Videos uploaded to Google Drive automatically!"
-        
+
+        # Report what Drive actually accepted. Claiming success from the mere
+        # presence of a Drive client hid a run where all 15 uploads failed.
+        if not self.drive_sync:
+            drive_status = "\n- Google Drive not configured."
+        elif drive_uploaded == total_videos and total_videos:
+            drive_status = f"\n✓ All {drive_uploaded} file(s) uploaded to Google Drive."
+        else:
+            drive_status = (
+                f"\n✗ Google Drive: {drive_uploaded} of {total_videos} file(s) uploaded. "
+                "Run `run_daily.py sync-drive` to backfill the rest."
+            )
+
         notification = {
             "timestamp": datetime.now().isoformat(),
             "generated_today": len(videos),
             "total_longs": total_longs,
             "total_shorts": total_shorts,
             "total_videos": total_videos,
+            "drive_uploaded": drive_uploaded,
             "total_pending": queue_summary["pending_videos"],
             "videos": videos,
             "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\nRun `python check_queue.py` to view the queue."
         }
 
-        notification_file = f"./notifications/ready_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        # Second-resolution alone lets two notifications in the same second
+        # overwrite each other, silently losing a run's record.
+        stamp = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+        notification_file = f"./notifications/ready_{stamp}.json"
         os.makedirs("./notifications", exist_ok=True)
         with open(notification_file, 'w') as f:
             json.dump(notification, f, indent=2)

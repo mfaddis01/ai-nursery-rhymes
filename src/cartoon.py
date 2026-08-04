@@ -286,19 +286,8 @@ def scene(theme: str, out_path: str, seed: int = 0) -> str:
             _sheep(d, 210 + i * 320, H - 330 + rng.randint(-40, 40), 92)
         return _save(img, out_path)
 
-    if any(k in t for k in ("sea", "ocean", "water", "rain", "boat")):
-        img = _vgradient(SKY_TOP, (150, 226, 255))
-        d = ImageDraw.Draw(img)
-        _sun(d, 860, 260, 96)
-        _cloud(d, 280, 350, 88)
-        for i, c in enumerate([(86, 178, 232), (58, 148, 210), (38, 118, 182)]):
-            d.ellipse([-300, H - 620 + i * 190, W + 300, H + 500], fill=c,
-                      outline=INK, width=OUTLINE)
-        for bx, by in ((300, 780), (450, 700), (600, 820)):
-            _bird(d, bx, by, 34)
-        _confetti(d, rng, 14, (120, 700))
-        return _save(img, out_path)
-
+    # Checked before the sea branch on purpose: "seasons" contains "sea", so
+    # the ocean test would otherwise swallow every seasonal rhyme.
     if any(k in t for k in ("garden", "flower", "spring", "forest", "tree", "season")):
         img = _vgradient(*_day_sky(rng))
         d = ImageDraw.Draw(img)
@@ -315,6 +304,19 @@ def scene(theme: str, out_path: str, seed: int = 0) -> str:
                     rng.choice([CORAL, PURPLE, SUN, ORANGE]))
         return _save(img, out_path)
 
+    if any(k in t for k in ("sea", "ocean", "water", "boat")):
+        img = _vgradient(SKY_TOP, (150, 226, 255))
+        d = ImageDraw.Draw(img)
+        _sun(d, 860, 260, 96)
+        _cloud(d, 280, 350, 88)
+        for i, c in enumerate([(86, 178, 232), (58, 148, 210), (38, 118, 182)]):
+            d.ellipse([-300, H - 620 + i * 190, W + 300, H + 500], fill=c,
+                      outline=INK, width=OUTLINE)
+        for bx, by in ((300, 780), (450, 700), (600, 820)):
+            _bird(d, bx, by, 34)
+        _confetti(d, rng, 14, (120, 700))
+        return _save(img, out_path)
+
     if any(k in t for k in ("farm", "animal", "sheep", "lamb", "barn")):
         img = _vgradient(*_day_sky(rng))
         d = ImageDraw.Draw(img)
@@ -329,13 +331,39 @@ def scene(theme: str, out_path: str, seed: int = 0) -> str:
             _sheep(d, 205 + i * 330, H - 340 + rng.randint(-40, 40), 96)
         return _save(img, out_path)
 
-    # default: high-energy playful
-    img = _vgradient((255, 205, 225), (255, 240, 200))
+    if any(k in t for k in ("weather", "wind", "rain", "cloud", "sky", "storm", "snow")):
+        img = _vgradient(*_day_sky(rng))
+        d = ImageDraw.Draw(img)
+        _sun(d, rng.choice([190, 860]), rng.randint(230, 300), 96)
+        for cx, cy, cs in ((250, 420, 96), (760, 330, 78), (480, 560, 66)):
+            _cloud(d, cx, cy, cs)
+        for bx, by in ((330, 760), (500, 690), (660, 800)):
+            _bird(d, bx, by, 34)
+        # doubles as leaves blown across the sky
+        _confetti(d, rng, 26, (150, H - 700))
+        _hills(d, H - 600, [MINT, GRASS])
+        for i in range(4):
+            _flower(d, 165 + i * 250, H - 290 + rng.randint(-60, 60), 56,
+                    rng.choice([CORAL, PURPLE, SUN, ORANGE]))
+        return _save(img, out_path)
+
+    # Default: counting, food, colours, family, playtime, morning routines and
+    # anything else unmapped land here, so it needs real subject matter - it
+    # used to be bare sky, hills and confetti with nothing alive in it.
+    img = _vgradient(*_day_sky(rng))
     d = ImageDraw.Draw(img)
-    _sun(d, 850, 270, 104, fill=SUN_DEEP)
-    _cloud(d, 270, 360, 88)
-    _confetti(d, rng, 40, (80, H - 640))
-    _hills(d, H - 560, [PURPLE, CORAL])
+    sun_x = rng.choice([185, 865])
+    _sun(d, sun_x, rng.randint(225, 295), 104, fill=SUN_DEEP)
+    _cloud(d, 1050 - sun_x, rng.randint(320, 400), 88)
+    for bx, by in ((300, 730), (455, 650), (610, 780)):
+        _bird(d, bx, by, 34)
+    for i, (bx, by) in enumerate(((230, 900), (780, 980), (500, 1090))):
+        _butterfly(d, bx, by, 46, [CORAL, PURPLE, ORANGE][i])
+    _confetti(d, rng, 22, (140, H - 700))
+    _hills(d, H - 600, [MINT, GRASS])
+    for i in range(5):
+        _flower(d, 135 + i * 205, H - 295 + rng.randint(-65, 65), 58,
+                rng.choice([CORAL, PURPLE, SUN, ORANGE]))
     return _save(img, out_path)
 
 

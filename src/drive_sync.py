@@ -52,7 +52,17 @@ class DriveSync:
             )
             self.service = None
         except Exception as e:
-            logger.error(f"Failed to authenticate with Google Drive: {e}")
+            # Workspace orgs can enforce a session limit on Google Cloud
+            # credentials, which expires ADC overnight and surfaces here as
+            # invalid_rapt. Re-running the login below re-mints it.
+            logger.error(
+                f"Failed to authenticate with Google Drive: {e}. "
+                "If this mentions reauthentication, run: "
+                "gcloud auth application-default login "
+                "--client-id-file=oauth-client.json "
+                "--scopes=https://www.googleapis.com/auth/drive,"
+                "https://www.googleapis.com/auth/cloud-platform"
+            )
             self.service = None
 
     @staticmethod
@@ -92,6 +102,15 @@ class DriveSync:
             credentials, _ = google.auth.default(scopes=self.SCOPES)
 
         self.service = build('drive', 'v3', credentials=credentials)
+
+        # build() never touches the network, so it succeeds just as happily with
+        # an expired refresh token as with a live one - which previously let a
+        # dead credential report itself as authenticated and every upload fail
+        # one at a time. Spend one cheap call proving the credential can be
+        # refreshed and the destination folder is actually reachable.
+        self.service.files().get(
+            fileId=self.folder_id, fields="id", supportsAllDrives=True,
+        ).execute()
 
     FOLDER_MIME = "application/vnd.google-apps.folder"
 

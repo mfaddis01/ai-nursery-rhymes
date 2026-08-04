@@ -64,7 +64,8 @@ def sync_drive(scheduler, dry_run: bool = False) -> int:
                 print(f"  would upload {day_dir.name}/{video.name}")
                 uploaded += 1
                 continue
-            if drive.upload_video(str(video), video.stem, "long", day=day_dir.name):
+            kind = "short" if "#Shorts" in video.name else "long"
+            if drive.upload_video(str(video), video.stem, kind, day=day_dir.name):
                 uploaded += 1
             else:
                 failed += 1

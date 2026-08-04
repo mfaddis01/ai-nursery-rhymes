@@ -106,5 +106,125 @@
     "age_group": "2-5",
     "duration_estimate": 120,
     "created": "2026-07-30T13:26:26.072738"
+  },
+  {
+    "id": "generated_9_20260731_060230",
+    "title": "The Wind Went Whooshing By",
+    "text": "The wind went whooshing, whoosh, whoosh, whoosh,\nIt tickled every leafy bush.\nIt spun the leaves around my feet,\nAnd danced them down the busy street.\n\nIt puffed my hat up in the air,\nIt made a mess of Grandma's hair!\nIt pushed the clouds across the blue,\nThen whooshed a little kiss at you.\n\nSo hold my hand and skip along,\nAnd hum the wind's whoosh-whooshing song!",
+    "source": "ai-generated",
+    "theme": [
+      "weather"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 136,
+    "created": "2026-07-31T06:02:30.220756"
+  },
+  {
+    "id": "generated_10_20260731_060314",
+    "title": "Hop Out of Bed",
+    "text": "Hop out of bed and stretch up tall,\nSay good morning to the wall!\nSplash the water, wash my face,\nBrush my teeth all over the place.\n\nShirt goes on, one arm, then two,\nWiggle, wiggle, in my shoe.\nBrush my hair and grab my cup,\nGulp, gulp, gulp \u2014 I'm all filled up!\n\nZip my coat and out the door,\nMorning, morning, hop some more!",
+    "source": "ai-generated",
+    "theme": [
+      "morning routines"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 132,
+    "created": "2026-07-31T06:03:14.146646"
+  },
+  {
+    "id": "generated_11_20260801_060232",
+    "title": "Grandma's Rocking Chair",
+    "text": "Grandma has a rocking chair,\nRock-a-rock, we sit right there.\nGrandpa hums a sleepy tune,\nHum-a-hum, beneath the moon.\nMama brings us cups of milk,\nWarm and soft and smooth as silk.\nPapa tells a story slow,\nWhispers low, then off we go.\nBaby claps her tiny hands,\nClap-a-clap, the whole house stands!\nOne big family, tucked in tight,\nHug-a-hug and say goodnight.",
+    "source": "ai-generated",
+    "theme": [
+      "family"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 126,
+    "created": "2026-08-01T06:02:32.701991"
+  },
+  {
+    "id": "generated_12_20260801_060315",
+    "title": "Moon Balloon",
+    "text": "A little moon balloon floats up so high,\nIt tugs a silver string across the sky.\nIt bumps the sleepy clouds and says goodnight,\nThen tucks each twinkly star in soft and tight.\n\nSo close your eyes and hold the string with me,\nWe'll drift above the hills and past the sea.\nThe moon balloon will rock us to and fro,\nAnd hum a little tune so sweet and low.\n\nGoodnight, balloon. Goodnight, the sleepy sky.\nGoodnight, my dear \u2014 the stars are saying bye.",
+    "source": "ai-generated",
+    "theme": [
+      "bedtime"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 170,
+    "created": "2026-08-01T06:03:15.111113"
+  },
+  {
+    "id": "generated_13_20260802_060227",
+    "title": "Snowman Melts to Spring",
+    "text": "Snowman standing round and white,\nWaves goodbye and melts one night.\nUp pops green in every row,\nTiny flowers on their toes!\n\nSummer sun says, \"Splash with me!\"\nToes go squishy in the sea.\nThen the leaves turn red and gold,\nCrunch, crunch, crunch! The air is cold.\n\nRound and round the seasons go,\nFlower, sunshine, leaf, and snow!",
+    "source": "ai-generated",
+    "theme": [
+      "the seasons"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 118,
+    "created": "2026-08-02T06:02:27.970918"
+  },
+  {
+    "id": "generated_14_20260802_060309",
+    "title": "Barnyard Wake-Up Song",
+    "text": "The rooster crows a wobbly tune,\nThe cow says moo beneath the moon.\nThe piggy wiggles in the mud,\nThe duckling splashes with a thud.\n\nThe sheep goes baa, the bees go buzz,\nThe kitten purrs in soft warm fuzz.\nThe puppy wags her happy tail,\nThe pony trots along the trail.\n\nSo clap your hands and stomp your feet,\nAnd sing the barnyard song so sweet!",
+    "source": "ai-generated",
+    "theme": [
+      "animals"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 134,
+    "created": "2026-08-02T06:03:09.575210"
+  },
+  {
+    "id": "generated_15_20260803_060221",
+    "title": "Bubbles in the Yard",
+    "text": "Dip the wand and blow, blow, blow,\nWatch the shiny bubbles go!\nOne floats high and one floats low,\nPop them with a toe, toe, toe!\n\nChase them round the apple tree,\nCatch a bubble, one, two, three!\nBig ones wobble, small ones spin,\nHere's a bubble on my chin!\n\nBlow again and count them all,\nBubbles bouncing like a ball!",
+    "source": "ai-generated",
+    "theme": [
+      "playtime"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 122,
+    "created": "2026-08-03T06:02:21.259630"
+  },
+  {
+    "id": "generated_16_20260803_060233",
+    "title": "Little Green Garden",
+    "text": "Dig a little hole, pat it nice and flat,\nDrop a little seed and give the dirt a pat.\nSprinkle, sprinkle water, one, two, three,\nNow the sleepy seed dreams a leafy dream with me.\nUp comes a stem, so wobbly and small,\nUp comes a leaf, then a stem grows tall!\nBusy bumblebee buzzes past my nose,\nTickly little worm wiggles by my toes.\nCarrots in a row and beans upon a vine,\nOne for you, and one for you, and one for mine!",
+    "source": "ai-generated",
+    "theme": [
+      "the garden"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 170,
+    "created": "2026-08-03T06:02:33.621596"
+  },
+  {
+    "id": "generated_17_20260804_060045",
+    "title": "Hello, Little Season",
+    "text": "Hello, little raindrop, tapping on my shoe,\nSpring is here to wake the world, and I say hello too!\nHello, little sunbeam, warm upon my nose,\nSummer buzzes softly where the sleepy flower grows.\nHello, little apple, rolling off the tree,\nAutumn drops a crunchy leaf and hands it right to me.\nHello, little snowflake, quiet as a mouse,\nWinter tucks a blanket on the rooftop of my house.\nRound and round the seasons go, one and two and three,\nHello, hello, four times more, and back around to me!",
+    "source": "ai-generated",
+    "theme": [
+      "the seasons"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 180,
+    "created": "2026-08-04T06:00:45.480525"
+  },
+  {
+    "id": "generated_18_20260804_060057",
+    "title": "Weather Wheel Turns",
+    "text": "Drip, drip, drop, the sky is gray,\nGrab your boots and splash away!\nWhoosh, the clouds go rolling out,\nSunshine gives a golden shout.\nCrackle-boom, the thunder plays,\nHide inside for just three days\u2014\nNo! Just one, and then we see\nA rainbow smiling down at me.\nSnow comes soft, then sun comes back,\nRound and round the weather track!",
+    "source": "ai-generated",
+    "theme": [
+      "weather"
+    ],
+    "age_group": "2-5",
+    "duration_estimate": 120,
+    "created": "2026-08-04T06:00:57.387797"
   }
 ]
