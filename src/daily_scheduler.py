@@ -6,6 +6,9 @@ from uuid import uuid4
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import json
+import credits
+import notify
+
 
 from rhyme_manager import RhymeManager
 from video_generator import VideoGenerator
@@ -195,6 +198,13 @@ class DailyScheduler:
                 "Run `run_daily.py sync-drive` to backfill the rest."
             )
 
+        # TTS quota rides along with every content notification. ElevenLabs is the
+        # metered dependency -- an exhausted character allowance stops generation
+        # dead while the rest of the pipeline still reports success. Never fatal:
+        # both calls swallow their own failures.
+        quota = credits.elevenlabs_quota()
+        credits_line = credits.format_credits_line(quota)
+
         notification = {
             "timestamp": datetime.now().isoformat(),
             "generated_today": len(videos),
@@ -204,8 +214,9 @@ class DailyScheduler:
             "drive_uploaded": drive_uploaded,
             "total_pending": queue_summary["pending_videos"],
             "videos": videos,
-            "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\nRun `python check_queue.py` to view the queue."
+            "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\n{credits_line}\n\nRun `python check_queue.py` to view the queue."
         }
+        notification["credits"] = {"elevenlabs": quota}
 
         # Second-resolution alone lets two notifications in the same second
         # overwrite each other, silently losing a run's record.
@@ -214,6 +225,9 @@ class DailyScheduler:
         os.makedirs("./notifications", exist_ok=True)
         with open(notification_file, 'w') as f:
             json.dump(notification, f, indent=2)
+
+        if not notify.send_telegram(notification["message"]):
+            logger.info("notification not delivered; see notify warnings above")
 
         logger.info(f"\n{'='*60}")
         logger.info("📺 VIDEOS READY FOR UPLOAD!")
