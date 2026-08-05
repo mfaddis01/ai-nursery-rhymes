@@ -23,6 +23,11 @@ _TIMEOUT = 15
 # A rhyme plus its title runs a few hundred characters; below this, the next
 # generation almost certainly fails partway rather than cleanly.
 LOW_CHARACTER_THRESHOLD = 1000
+# The shortest rhyme the pipeline could ever send to TTS. An 8-line rhyme of
+# simple children's verse is around 200 characters; the two that 401'd on
+# 2026-08-05 needed 326 and 374. Below this no rhyme can succeed, so a batch
+# started with less than this is guaranteed to produce nothing.
+MIN_RHYME_CHARACTERS = 200
 
 
 def elevenlabs_quota() -> Optional[dict]:
@@ -55,6 +60,19 @@ def elevenlabs_quota() -> Optional[dict]:
         "resets_unix": data.get("next_character_count_reset_unix"),
         "low": remaining < LOW_CHARACTER_THRESHOLD,
     }
+
+
+def can_generate(quota: Optional[dict]) -> bool:
+    """False only when the quota is known to be too small for even one rhyme.
+
+    An unreadable quota (None) counts as usable. This module must never be the
+    reason a batch does not run, so "I could not check" always means "go ahead
+    and try" -- the TTS call itself remains the authority on whether the
+    characters are there.
+    """
+    if quota is None:
+        return True
+    return quota["remaining"] >= MIN_RHYME_CHARACTERS
 
 
 def format_credits_line(quota: Optional[dict]) -> str:

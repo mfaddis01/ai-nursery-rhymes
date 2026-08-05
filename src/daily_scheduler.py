@@ -57,6 +57,30 @@ class DailyScheduler:
         generated_videos = []
         drive_uploaded = 0
 
+        # TTS is the first step of every video, so an exhausted ElevenLabs
+        # character quota makes the entire batch impossible before it starts.
+        # Discovering that per-video instead costs a Claude CLI call for every
+        # AI slot, and generate_new_rhyme saves the rhyme to disk *before* TTS
+        # runs -- so each doomed run permanently orphans rhymes that never
+        # become videos and still crowd out later ones via the "already exists"
+        # list. One quota lookup up front avoids all of it.
+        quota = credits.elevenlabs_quota()
+        if not credits.can_generate(quota):
+            logger.error(
+                "Aborting the batch before generating anything: the ElevenLabs "
+                f"quota cannot cover a single rhyme. {credits.format_credits_line(quota)}"
+            )
+            self._notify_videos_ready(
+                [], 0, quota=quota,
+                blocked="TTS quota exhausted — nothing was generated, and no "
+                        "Claude rhymes were spent. Generation resumes when the "
+                        "quota resets or the plan is upgraded.",
+            )
+            logger.info("=" * 60)
+            logger.info("Daily video generation job complete")
+            logger.info("=" * 60)
+            return 0
+
         sources = [force_source or ("popular" if i < 3 else "generated") for i in range(total)]
         popular_picks = self._distinct_popular(sources.count("popular"))
 
@@ -177,8 +201,14 @@ class DailyScheduler:
             )
         return uploaded
 
-    def _notify_videos_ready(self, videos: list, drive_uploaded: int = 0):
-        """Create a notification that videos are ready for upload."""
+    def _notify_videos_ready(self, videos: list, drive_uploaded: int = 0,
+                             quota: dict = None, blocked: str = None):
+        """Create a notification that videos are ready for upload.
+
+        `quota` lets a caller that already looked the quota up pass it in
+        rather than paying for a second lookup; `blocked` explains a batch
+        that was abandoned before it started.
+        """
         queue_summary = self.upload_queue.get_queue_summary()
 
         # Count actual videos (long + shorts)
@@ -202,8 +232,10 @@ class DailyScheduler:
         # metered dependency -- an exhausted character allowance stops generation
         # dead while the rest of the pipeline still reports success. Never fatal:
         # both calls swallow their own failures.
-        quota = credits.elevenlabs_quota()
+        if quota is None:
+            quota = credits.elevenlabs_quota()
         credits_line = credits.format_credits_line(quota)
+        blocked_line = f"\n\n🛑 {blocked}" if blocked else ""
 
         notification = {
             "timestamp": datetime.now().isoformat(),
@@ -214,8 +246,9 @@ class DailyScheduler:
             "drive_uploaded": drive_uploaded,
             "total_pending": queue_summary["pending_videos"],
             "videos": videos,
-            "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\n{credits_line}\n\nRun `python check_queue.py` to view the queue."
+            "message": f"🎬 Video generation complete!\n\nGenerated today: {total_longs} long-form + {total_shorts} short-form = {total_videos} videos\nTotal pending upload: {queue_summary['pending_videos']}{drive_status}\n\n{credits_line}{blocked_line}\n\nRun `python check_queue.py` to view the queue."
         }
+        notification["blocked"] = blocked
         notification["credits"] = {"elevenlabs": quota}
 
         # Second-resolution alone lets two notifications in the same second
