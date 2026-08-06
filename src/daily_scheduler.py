@@ -218,9 +218,26 @@ class DailyScheduler:
 
         # Report what Drive actually accepted. Claiming success from the mere
         # presence of a Drive client hid a run where all 15 uploads failed.
+        # The converse matters too: a run that produced nothing had nothing to
+        # mirror, and reporting "0 of 0 uploaded" invents a Drive failure that
+        # did not happen -- noise that competes with the real reason the run
+        # produced nothing. And when Drive is configured but its credentials
+        # have expired, the backfill command being suggested cannot run either,
+        # so the notification has to name the credential problem instead.
         if not self.drive_sync:
             drive_status = "\n- Google Drive not configured."
-        elif drive_uploaded == total_videos and total_videos:
+        elif not self.drive_sync.is_authenticated():
+            drive_status = (
+                "\n⚠️ Google Drive: not authenticated, so nothing was mirrored. "
+                "Re-run `gcloud auth application-default login "
+                "--client-id-file=oauth-client.json "
+                "--scopes=https://www.googleapis.com/auth/drive,"
+                "https://www.googleapis.com/auth/cloud-platform`, then "
+                "`run_daily.py sync-drive` to backfill."
+            )
+        elif not total_videos:
+            drive_status = "\n- Google Drive: nothing to upload."
+        elif drive_uploaded == total_videos:
             drive_status = f"\n✓ All {drive_uploaded} file(s) uploaded to Google Drive."
         else:
             drive_status = (
